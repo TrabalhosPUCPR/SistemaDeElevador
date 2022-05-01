@@ -20,7 +20,7 @@ int fila_pri, fila_qntd = 0; // vai ser uma fila circular entao ele guarda qual 
 int fila_tamanho = 10;
 
 // andar que o elevador esta atualmente
-int andar_elevador = 0;
+int andar_elevador = 9;
 
 // estado e a direcao que o elevador ta indo
 enum{
@@ -28,6 +28,7 @@ enum{
   	MOVENDO,
   	ALINHADO,
   	ABERTO,
+  	EMERGENCIA
 } estado_elev = DESLIGADO;
 enum {
   	SUBINDO,
@@ -51,6 +52,9 @@ int d_proxAndar = 2000; // tempo para o elevador ir para o proximo andar
 int d_aberto = 8000; // tempo que o elevador vai ficar aberto quando chegar no destino
 
 void setup(){
+  	for(int i = 0; i < sizeof(fila_elevador)/sizeof(int); i++){
+		fila_elevador[i] = -1; 
+	}
   	pinMode(led_operante, OUTPUT);
 	pinMode(led_portaAberta, OUTPUT);
 	pinMode(led_emergencia, OUTPUT);
@@ -76,6 +80,7 @@ void setup(){
   	Serial.println("Entrando no loop");
 } 
 
+///* codigo principal do sistema
 void loop(){
     if(estado_elev == ABERTO){
       	while(!fila_vazio()){ // enquanto a fila de chamadas nao estiver vazia
@@ -83,18 +88,19 @@ void loop(){
         }
     }
 }
+//*/
 
 void mover_elevador(){
   	ligar_led_strip(prox_Destino(), 3); // liga o led no quarto strip mostrando q e la o destino do elevador
   	estado_elev = MOVENDO;
+  	if(andar_elevador > prox_Destino()){direcao_elev = DESCENDO;}
+    else{direcao_elev = SUBINDO;}
     digitalWrite(led_portaAberta, LOW);
     Serial.println("Fechando a porta...");
     delay(d_porta);
     Serial.println("Porta fechada");
   	Serial.println("Indo ao andar...");
-    if(andar_elevador > prox_Destino()){direcao_elev = DESCENDO;}
-    else{direcao_elev = SUBINDO;}
-    while(andar_elevador != prox_Destino() && estado_elev != DESLIGADO){ // elevador pode desligar durante o loop, mas pelo menos so vai sair qnd ele estiver alinhado
+    while(andar_elevador != prox_Destino() && (estado_elev != DESLIGADO || estado_elev != EMERGENCIA)){ // elevador pode desligar durante o loop, mas pelo menos so vai sair qnd ele estiver alinhado
         delay(d_proxAndar);
         estado_elev = ALINHADO;
         alinhado_elevador();
@@ -103,6 +109,8 @@ void mover_elevador(){
   	Serial.print("Chegamos no ");Serial.print(prox_Destino());Serial.println(" andar");
   	Serial.println("Porta abrindo...");
   	fila_remove();
+  	if(andar_elevador > prox_Destino()){fila_ordenar_descendo(1);}
+    else{fila_ordenar_subindo(1);}
   	delay(d_porta);
   	digitalWrite(led_portaAberta, HIGH);
   	estado_elev = ABERTO;
@@ -155,7 +163,6 @@ void botao_elevador(){
         if(res_botao == valorbotoes_andares[i]){
         	if(andar_elevador > i){ligar_led_strip(i, 2); fila_adicionar(i);} // caso o andar atual do elevador for maior que o precionado vai comecar a descer
           	else if(andar_elevador < i){ligar_led_strip(i, 1); fila_adicionar(i);}
-			// se o andar precionado for o mesmo que o elevador esta nao faz nada
           	return;
         }
     }
@@ -166,6 +173,8 @@ void botao_elevador(){
           break;
         case 710:
             Serial.println("emergencia");
+      		estado_elev = EMERGENCIA;
+      		digitalWrite(led_emergencia, HIGH);
           break;
         case 701:
       		estado_elev = ABERTO;
@@ -175,11 +184,24 @@ void botao_elevador(){
           break;
         case 691:
             estado_elev = DESLIGADO;
+      		direcao_elev = PARADO;
       		digitalWrite(led_operante, LOW);
             Serial.println("Elevador desligado");
           break;
   	}
 }
+
+// ta aqui so pra testa mais rapido os ngc da fila
+/*
+void loop(){
+  direcao_elev = SUBINDO;
+  fila_adicionar(8);
+  fila_adicionar(5);
+  fila_adicionar(2);
+  while(true){}
+}
+*/
+
 boolean contains(int filaa[], int valor){
 	for(int i = 0; i < sizeof(filaa)/sizeof(int); i++){
       	if(filaa[i] == valor){return true;}
@@ -187,12 +209,78 @@ boolean contains(int filaa[], int valor){
   	return false;
 }
 void fila_adicionar(int andar){ // adiciona por ultimo
-	fila_elevador[fila_qntd % fila_tamanho] = andar;
-	fila_qntd++;
+  	// a ideia e fazer com que caso o elevador esteja subindo, ele coloque em prioridade aqueles que ele vai passar por
+  	// ex, elevador esta no terreo e indo ao nono andar, ele para nos andares que foi chamado dentro dele e os que foram chamados para subir ate o nono
+	//fila_elevador[fila_qntd % fila_tamanho] = andar;
+  	if(!contains(fila_elevador, andar)){
+      desligar_led_strip(prox_Destino(), 3); // apaga so caso o proximo andar for mudar
+      if(fila_vazio()){
+          fila_elevador[fila_qntd % fila_tamanho] = andar;
+      }else{
+          if(direcao_elev == SUBINDO && andar_elevador < andar){
+              fila_elevador[fila_qntd % fila_tamanho] = andar;
+              fila_ordenar_subindo(0);
+              /*
+              int aTrocar_pos = fila_qntd % fila_tamanho;
+              int aTrocar;
+              for(int i = fila_qntd - 1; fila_elevador[i % fila_tamanho] > fila_elevador[aTrocar_pos]; i--, aTrocar_pos--){ // primeiro verifica se realmente o novo numero esta entre o destino atual e os proximos
+                  aTrocar = fila_elevador[i % fila_tamanho];
+                  fila_elevador[i % fila_tamanho] = fila_elevador[aTrocar_pos];
+                  fila_elevador[aTrocar_pos] = aTrocar;
+                  if(i - 1 == -1){i=10;}
+                  if(aTrocar_pos - 1 == -1){aTrocar_pos=10;}
+              } 
+              */
+          }
+          else if(direcao_elev == DESCENDO && andar_elevador > andar){
+              fila_elevador[fila_qntd % fila_tamanho] = andar;
+              fila_ordenar_descendo(0);
+              /*
+              int aTrocar_pos = fila_qntd % fila_tamanho;
+              int aTrocar;
+              int cont = 0;
+              for(int i = fila_qntd - 1; fila_elevador[i % fila_tamanho] < fila_elevador[aTrocar_pos] && cont < fila_qntd; i--, aTrocar_pos--, cont++){ // primeiro verifica se realmente o novo numero esta entre o destino atual e os proximos
+                  aTrocar = fila_elevador[i % fila_tamanho];
+                  fila_elevador[i % fila_tamanho] = fila_elevador[aTrocar_pos];
+                  fila_elevador[aTrocar_pos] = aTrocar;
+                  if(i - 1 == -1){i=10;}
+                  if(aTrocar_pos - 1 == -1){aTrocar_pos=10;}
+              } 
+              */
+          }else{
+              fila_elevador[fila_qntd % fila_tamanho] = andar;
+          }
+      }
+      fila_qntd++;
+      ligar_led_strip(prox_Destino(), 3);
+    }
+}
+
+void fila_ordenar_descendo(int n){ // o n e so pra diferencia qnd ta adicionando e so ordenando, da pra fazer melhor mas eu n quero
+    int aTrocar_pos = (fila_qntd - n) % fila_tamanho;
+    int aTrocar;
+    for(int i = fila_qntd - 1 - n; fila_elevador[i % fila_tamanho] < fila_elevador[aTrocar_pos] && fila_elevador[i % fila_tamanho] != -1; i--, aTrocar_pos--){ // primeiro verifica se realmente o novo numero esta entre o destino atual e os proximos
+        aTrocar = fila_elevador[i % fila_tamanho];
+        fila_elevador[i % fila_tamanho] = fila_elevador[aTrocar_pos];
+        fila_elevador[aTrocar_pos] = aTrocar;
+        if(i - 1 == -1){i=10;}
+    }
+}
+
+void fila_ordenar_subindo(int n){
+    int aTrocar_pos = (fila_qntd - n) % fila_tamanho;
+    int aTrocar;
+    for(int i = fila_qntd - 1 - n; fila_elevador[i % fila_tamanho] > fila_elevador[aTrocar_pos]; i--, aTrocar_pos--){ // primeiro verifica se realmente o novo numero esta entre o destino atual e os proximos
+        aTrocar = fila_elevador[i % fila_tamanho];
+        fila_elevador[i % fila_tamanho] = fila_elevador[aTrocar_pos];
+        fila_elevador[aTrocar_pos] = aTrocar;
+        if(i - 1 == -1){i=10;}
+        if(aTrocar_pos - 1 == -1){aTrocar_pos=10;}
+    } 
 }
 
 void fila_remove(){ // remove o primeiro elemento da lista
-	fila_elevador[fila_pri % fila_tamanho] = NULL;
+	fila_elevador[fila_pri % fila_tamanho] = -1; // eu vo considera -1 como o nulo da fila, mesmo so sendo util pra organiza dos maiores pro menor
   	fila_pri++;
 }
 
@@ -203,6 +291,14 @@ boolean fila_vazio(){
 int prox_Destino(){ // retorna o proximo andar da fila
 	return fila_elevador[fila_pri % fila_tamanho];
 }
+
+void fila_resetar(){
+    for(int i = 0; i < sizeof(fila_elevador)/sizeof(int); i++){
+		fila_elevador[i] = NULL; 
+    }
+	fila_pri, fila_qntd = 0; // vai ser uma fila circular entao ele guarda qual posicao pra ler e a quantidade de chamadas
+}
+
 
 /*
 	leds vao de 0 a 10
