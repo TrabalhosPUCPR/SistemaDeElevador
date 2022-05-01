@@ -142,9 +142,10 @@ void andar_chamado_subir_descer(){
     }
     for(int i = 0; i < sizeof(valorbotoes_andares)/sizeof(int); i++){ // como o tinker cad demora 345354 horas pra da scroll eu vo diminui o tamanho do codigo por nao fazer switch case
         if(res_botao == valorbotoes_andares[i]){
-        	ligar_led_strip(i, fita);
-          	fila_adicionar(i);
-          	return;
+          	if(i == andar_elevador){return;} // retorna antes de tudo caso o andar selecionado e o mesmo que o elevador ja esta
+                ligar_led_strip(i, fita);
+                fila_adicionar(i);
+                return;
         }
     }
 }
@@ -186,21 +187,17 @@ boolean contains(int filaa[], int valor){
   	return false;
 }
 void fila_adicionar(int andar){ // adiciona por ultimo
-    if(!contains(fila_elevador, andar)){ // nao adiciona o msm andar varias vezes
-		fila_elevador[fila_qntd % fila_tamanho] = andar;
-      	fila_qntd++;
-    }
+	fila_elevador[fila_qntd % fila_tamanho] = andar;
+	fila_qntd++;
 }
 
 void fila_remove(){ // remove o primeiro elemento da lista
 	fila_elevador[fila_pri % fila_tamanho] = NULL;
-  	fila_qntd--;
-  	if(!(fila_qntd == 0)){fila_pri++;}
-  	else{fila_pri = 0;}
+  	fila_pri++;
 }
 
 boolean fila_vazio(){
-	return (fila_qntd == 0);
+	return (fila_qntd - fila_pri == 0);
 }
 
 int prox_Destino(){ // retorna o proximo andar da fila
