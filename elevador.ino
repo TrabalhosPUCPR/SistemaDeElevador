@@ -1,5 +1,7 @@
 #include <Adafruit_NeoPixel.h>
 
+// link para o circuito no tinkercad: https://www.tinkercad.com/things/lFbbBNb01og
+
 // C++ code
 //
 
@@ -20,7 +22,7 @@ int fila_pri, fila_qntd = 0; // vai ser uma fila circular entao ele guarda qual 
 int fila_tamanho = 10;
 
 // andar que o elevador esta atualmente
-int andar_elevador = 9;
+int andar_elevador = 0;
 
 // estado e a direcao que o elevador ta indo
 enum{
@@ -28,7 +30,8 @@ enum{
   	MOVENDO,
   	ALINHADO,
   	ABERTO,
-  	EMERGENCIA
+  	EMERGENCIA,
+  	AGUARDANDO
 } estado_elev = DESLIGADO;
 
 enum Direcoes{SUBINDO, DESCENDO, PARADO, ELEVADOR}; // eu queria fazer um enum direcoes que tem isso ai so define cada coisa como ele mas ta dando erro
@@ -85,7 +88,7 @@ void setup(){
 
 ///* codigo principal do sistema
 void loop(){
-    if(estado_elev == ABERTO){
+    if(estado_elev == ABERTO || estado_elev == AGUARDANDO){
       	while(!fila_vazio()){ // enquanto a fila de chamadas nao estiver vazia
         	mover_elevador();
         }
@@ -93,15 +96,24 @@ void loop(){
 }
 //*/
 
+int d_aberto2 = d_aberto; // so pra muda ele e nao perde o valor inserido la em cima
+void delay_porta(){
+	long tempo_comeco = millis();
+    while(millis() - tempo_comeco <= d_aberto2){}
+  	d_aberto2 = d_aberto;
+}
+
 void mover_elevador(){
   	ligar_led_strip(prox_Destino(), 3); // liga o led no quarto strip mostrando q e la o destino do elevador
   	estado_elev = MOVENDO;
   	if(andar_elevador > prox_Destino()){direcao_elev = DESCENDO;}
     else{direcao_elev = SUBINDO;}
     digitalWrite(led_portaAberta, LOW);
-    Serial.println("Fechando a porta...");
-    delay(d_porta);
-    Serial.println("Porta fechada");
+    if(estado_elev == ABERTO){
+        Serial.println("Fechando a porta...");
+        delay(d_porta);
+        Serial.println("Porta fechada");
+    }
   	Serial.println("Indo ao andar...");
     while(andar_elevador != prox_Destino() && (estado_elev != DESLIGADO || estado_elev != EMERGENCIA)){ // elevador pode desligar durante o loop, mas pelo menos so vai sair qnd ele estiver alinhado
         delay(d_proxAndar);
@@ -118,8 +130,8 @@ void mover_elevador(){
   	digitalWrite(led_portaAberta, HIGH);
   	estado_elev = ABERTO;
   	Serial.println("Porta aberta");
-  	delay(d_aberto);
-  	Serial.println("Aguardando proximo sinal");
+  	delay_porta(); // delay pro tempo que a porta ficara aberto
+  	Serial.println("Aguardando proximo sinal"); // "AGUARDANDO" mas a porta continua aberto
 }
 
 void alinhado_elevador(){ // quando estiver alinhado com algum andar ele desliga o led do andar anterior e liga o que o elevador esta agora
@@ -175,15 +187,30 @@ void botao_elevador(){
   	// aqui so vai rodar se tiver precionado os botao que nao seja pra ir ao andar
 	switch(res_botao){
         case 720:
-            Serial.println("porta");
+            if(estado_elev == ABERTO){
+              	Serial.println("Botao para fechar a porta precionado!");
+              	Serial.println("Fechando porta...");
+				d_aberto2 = 0; // coloca o tempo do delay como 0, fechando na hora, unico delay q tem dai e o tempo pra fecha a porta claro
+              	digitalWrite(led_portaAberta, LOW);
+              	estado_elev = AGUARDANDO;
+              	delay(d_porta);
+              	Serial.println("Porta fechada");
+            }else if(estado_elev == AGUARDANDO){
+				Serial.println("Botao para abrir a porta precionado!");
+              	Serial.println("Abrindo porta...");
+              	delay(d_porta);
+              	Serial.println("Porta aberta");
+              	estado_elev = ABERTO;
+              	digitalWrite(led_portaAberta, HIGH);
+            }
           break;
         case 710:
-            Serial.println("emergencia");
+            Serial.println("Botao de emergencia precionado!");
       		estado_elev = EMERGENCIA;
       		digitalWrite(led_emergencia, HIGH);
           break;
         case 701:
-      		estado_elev = ABERTO;
+      		estado_elev = ABERTO; // abre e fica aberto qnd liga
       		digitalWrite(led_portaAberta, HIGH);
       		digitalWrite(led_operante, HIGH);
             Serial.println("Elevador ligado");
