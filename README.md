@@ -5,7 +5,7 @@ Sistema de elevador feito no Arduino
 - cada andar possui botao para subir e descer
 - ordem de prioridade caso o elevador estiver subindo ou descendo
 - prioriza quem apertou o botao dentro do elevador, mas para em todos os andares chamados caso queira ir na mesma direcao
-- possui 4 fitas de led, o primeiro para o posicao do elevador, segundo para os andares chamados para subir, terceiro para descer e o quarto onde o proximo andar que o elevador ira parar
+- possui 4 fitas de led, o primeiro para a posicao do elevador, segundo para os andares chamados para subir, terceiro para descer e o quarto mostra o proximo andar que o elevador ira parar
 - botao para desligar e ligar o elevador
 - botao para ativar modo de emergencia do elevador
 - botao para mudar o estado da porta
