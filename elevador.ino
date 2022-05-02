@@ -30,11 +30,13 @@ enum{
   	ABERTO,
   	EMERGENCIA
 } estado_elev = DESLIGADO;
-enum {
-  	SUBINDO,
-  	DESCENDO,
-  	PARADO
-} direcao_elev = PARADO;
+
+enum Direcoes{SUBINDO, DESCENDO, PARADO, ELEVADOR}; // eu queria fazer um enum direcoes que tem isso ai so define cada coisa como ele mas ta dando erro
+// o ELEVADOR e so pra diferencia qnd a chamada foi feita dentro do elevador e fora
+
+enum Direcoes direcao_elev = PARADO;
+enum Direcoes direcao_botao = PARADO;
+enum Direcoes fila_direcoes[10];
 
 // coisas das fitas de led
 #define LEDSTRIP_ANDARES_PIN  13
@@ -54,6 +56,7 @@ int d_aberto = 8000; // tempo que o elevador vai ficar aberto quando chegar no d
 void setup(){
   	for(int i = 0; i < sizeof(fila_elevador)/sizeof(int); i++){
 		fila_elevador[i] = -1; 
+      	fila_direcoes[i] = PARADO; 
 	}
   	pinMode(led_operante, OUTPUT);
 	pinMode(led_portaAberta, OUTPUT);
@@ -109,8 +112,8 @@ void mover_elevador(){
   	Serial.print("Chegamos no ");Serial.print(prox_Destino());Serial.println(" andar");
   	Serial.println("Porta abrindo...");
   	fila_remove();
-  	if(andar_elevador > prox_Destino()){fila_ordenar_descendo(1);}
-    else{fila_ordenar_subindo(1);}
+  	if(andar_elevador > prox_Destino() && !fila_vazio()){fila_ordenar_descendo(1);}
+    else if(!fila_vazio()){fila_ordenar_subindo(1);}
   	delay(d_porta);
   	digitalWrite(led_portaAberta, HIGH);
   	estado_elev = ABERTO;
@@ -144,9 +147,11 @@ void andar_chamado_subir_descer(){
   	if(analogRead(botoesdescer) != 0){
   		res_botao = analogRead(botoesdescer);
       	fita = 2;
+      	direcao_botao = DESCENDO;
     }else{
     	res_botao = analogRead(botoessubir);
       	fita = 1;
+      	direcao_botao = SUBINDO;
     }
     for(int i = 0; i < sizeof(valorbotoes_andares)/sizeof(int); i++){ // como o tinker cad demora 345354 horas pra da scroll eu vo diminui o tamanho do codigo por nao fazer switch case
         if(res_botao == valorbotoes_andares[i]){
@@ -161,6 +166,7 @@ void botao_elevador(){
   	int res_botao = analogRead(botoeselevador);
   	for(int i = 0; i < sizeof(valorbotoes_andares)/sizeof(int); i++){
         if(res_botao == valorbotoes_andares[i]){
+          	direcao_botao = ELEVADOR;
         	if(andar_elevador > i){ligar_led_strip(i, 2); fila_adicionar(i);} // caso o andar atual do elevador for maior que o precionado vai comecar a descer
           	else if(andar_elevador < i){ligar_led_strip(i, 1); fila_adicionar(i);}
           	return;
@@ -191,96 +197,131 @@ void botao_elevador(){
   	}
 }
 
-// ta aqui so pra testa mais rapido os ngc da fila
-/*
-void loop(){
-  direcao_elev = SUBINDO;
-  fila_adicionar(8);
-  fila_adicionar(5);
-  fila_adicionar(2);
-  while(true){}
-}
-*/
-
 boolean contains(int filaa[], int valor){
 	for(int i = 0; i < sizeof(filaa)/sizeof(int); i++){
       	if(filaa[i] == valor){return true;}
     }
   	return false;
 }
-void fila_adicionar(int andar){ // adiciona por ultimo
+void fila_adicionar(int andar){
   	// a ideia e fazer com que caso o elevador esteja subindo, ele coloque em prioridade aqueles que ele vai passar por
   	// ex, elevador esta no terreo e indo ao nono andar, ele para nos andares que foi chamado dentro dele e os que foram chamados para subir ate o nono
-	//fila_elevador[fila_qntd % fila_tamanho] = andar;
+	// outra coisa tb, caso o elevador estiver subindo ate o 9 andar e ele estiver no 2, se o botao para descer no 5 andar for precionado, ele nao tem prioridade
+  	// e por ultimo, caso o elevador estiver parado e algum botao de um andar mt proximo for precionado, ele coloca esse no primeiro da lista
+  	// fila_elevador[fila_qntd % fila_tamanho] = andar;
   	if(!contains(fila_elevador, andar)){
       desligar_led_strip(prox_Destino(), 3); // apaga so caso o proximo andar for mudar
       if(fila_vazio()){
-          fila_elevador[fila_qntd % fila_tamanho] = andar;
+      		fila_elevador[fila_qntd % fila_tamanho] = andar;
+          	fila_direcoes[fila_qntd % fila_tamanho] = direcao_botao;
       }else{
-          if(direcao_elev == SUBINDO && andar_elevador < andar){
+          if(direcao_elev == SUBINDO && andar_elevador < andar && direcao_botao == SUBINDO){
               fila_elevador[fila_qntd % fila_tamanho] = andar;
+              fila_direcoes[fila_qntd % fila_tamanho] = direcao_botao;
               fila_ordenar_subindo(0);
-              /*
-              int aTrocar_pos = fila_qntd % fila_tamanho;
-              int aTrocar;
-              for(int i = fila_qntd - 1; fila_elevador[i % fila_tamanho] > fila_elevador[aTrocar_pos]; i--, aTrocar_pos--){ // primeiro verifica se realmente o novo numero esta entre o destino atual e os proximos
-                  aTrocar = fila_elevador[i % fila_tamanho];
-                  fila_elevador[i % fila_tamanho] = fila_elevador[aTrocar_pos];
-                  fila_elevador[aTrocar_pos] = aTrocar;
-                  if(i - 1 == -1){i=10;}
-                  if(aTrocar_pos - 1 == -1){aTrocar_pos=10;}
-              } 
-              */
           }
-          else if(direcao_elev == DESCENDO && andar_elevador > andar){
+          else if(direcao_elev == DESCENDO && andar_elevador > andar && direcao_botao == DESCENDO){
               fila_elevador[fila_qntd % fila_tamanho] = andar;
+              fila_direcoes[fila_qntd % fila_tamanho] = direcao_botao;
               fila_ordenar_descendo(0);
-              /*
-              int aTrocar_pos = fila_qntd % fila_tamanho;
-              int aTrocar;
-              int cont = 0;
-              for(int i = fila_qntd - 1; fila_elevador[i % fila_tamanho] < fila_elevador[aTrocar_pos] && cont < fila_qntd; i--, aTrocar_pos--, cont++){ // primeiro verifica se realmente o novo numero esta entre o destino atual e os proximos
-                  aTrocar = fila_elevador[i % fila_tamanho];
-                  fila_elevador[i % fila_tamanho] = fila_elevador[aTrocar_pos];
-                  fila_elevador[aTrocar_pos] = aTrocar;
-                  if(i - 1 == -1){i=10;}
-                  if(aTrocar_pos - 1 == -1){aTrocar_pos=10;}
-              } 
-              */
+          }else if(direcao_botao == ELEVADOR){ // prioridade maxima pra quem ta dentro do elevador, a nao ser claro que esteja no caminho de um outro andar chamado
+              		fila_adicionar_primeiro(andar);
+           	  if(andar > andar_elevador){
+                    fila_ordenar_subindo2();
+              }else{
+                    fila_ordenar_descendo2();
+              }
           }else{
+              //fila_qntd--;
               fila_elevador[fila_qntd % fila_tamanho] = andar;
+              fila_direcoes[fila_qntd % fila_tamanho] = direcao_botao;
           }
       }
+      direcao_botao = PARADO;
       fila_qntd++;
       ligar_led_strip(prox_Destino(), 3);
     }
 }
 
+void fila_adicionar_primeiro(int valor){
+  	fila_pri--;
+  	fila_qntd--;
+  	if(fila_pri == -1){fila_pri = 9;}
+	fila_elevador[fila_pri % fila_tamanho] = valor;
+  	fila_direcoes[fila_pri % fila_tamanho] = direcao_botao;
+}
+
 void fila_ordenar_descendo(int n){ // o n e so pra diferencia qnd ta adicionando e so ordenando, da pra fazer melhor mas eu n quero
     int aTrocar_pos = (fila_qntd - n) % fila_tamanho;
     int aTrocar;
-    for(int i = fila_qntd - 1 - n; fila_elevador[i % fila_tamanho] < fila_elevador[aTrocar_pos] && fila_elevador[i % fila_tamanho] != -1; i--, aTrocar_pos--){ // primeiro verifica se realmente o novo numero esta entre o destino atual e os proximos
-        aTrocar = fila_elevador[i % fila_tamanho];
-        fila_elevador[i % fila_tamanho] = fila_elevador[aTrocar_pos];
-        fila_elevador[aTrocar_pos] = aTrocar;
-        if(i - 1 == -1){i=10;}
-    }
+  	enum Direcoes aTrocarD;
+  	for(int i = fila_qntd - 1 - n; (fila_elevador[i % fila_tamanho] < fila_elevador[aTrocar_pos % fila_tamanho] && fila_elevador[i % fila_tamanho] != -1) && (fila_direcoes[aTrocar_pos % fila_tamanho] != SUBINDO && fila_elevador[i % fila_tamanho] != -1); i--, aTrocar_pos--){ // primeiro verifica se realmente o novo numero esta entre o destino atual e os proximos
+        if(fila_elevador[aTrocar_pos % fila_tamanho] < andar_elevador){ // so vai ordenar aqueles que forem maior que o andar do elevador
+            aTrocar = fila_elevador[i % fila_tamanho];
+          	aTrocarD = fila_direcoes[i % fila_tamanho];
+            fila_elevador[i % fila_tamanho] = fila_elevador[aTrocar_pos % fila_tamanho];
+          	fila_direcoes[i % fila_tamanho] = fila_direcoes[aTrocar_pos % fila_tamanho];
+            fila_elevador[aTrocar_pos % fila_tamanho] = aTrocar;
+          	fila_direcoes[aTrocar_pos % fila_tamanho] = aTrocarD;
+        }
+      	if(i - 1 == -1){i = 10;}
+        if(aTrocar_pos - 1 == -1){aTrocar_pos = 10;}
+    } 
 }
 
-void fila_ordenar_subindo(int n){
+void fila_ordenar_subindo(int n){ // do ultimo para o primeiro
     int aTrocar_pos = (fila_qntd - n) % fila_tamanho;
     int aTrocar;
-    for(int i = fila_qntd - 1 - n; fila_elevador[i % fila_tamanho] > fila_elevador[aTrocar_pos]; i--, aTrocar_pos--){ // primeiro verifica se realmente o novo numero esta entre o destino atual e os proximos
-        aTrocar = fila_elevador[i % fila_tamanho];
-        fila_elevador[i % fila_tamanho] = fila_elevador[aTrocar_pos];
-        fila_elevador[aTrocar_pos] = aTrocar;
-        if(i - 1 == -1){i=10;}
-        if(aTrocar_pos - 1 == -1){aTrocar_pos=10;}
+  	enum Direcoes aTrocarD;
+    for(int i = fila_qntd - 1 - n; fila_elevador[i % fila_tamanho] > fila_elevador[aTrocar_pos % fila_tamanho] && (fila_direcoes[aTrocar_pos % fila_tamanho] != DESCENDO && fila_elevador[i % fila_tamanho] != -1); i--, aTrocar_pos--){ // primeiro verifica se realmente o novo numero esta entre o destino atual e os proximos
+        if(fila_elevador[aTrocar_pos % fila_tamanho] > andar_elevador){ // so vai ordenar aqueles que forem maior que o andar do elevador
+            aTrocar = fila_elevador[i % fila_tamanho];
+          	aTrocarD = fila_direcoes[i % fila_tamanho];
+            fila_elevador[i % fila_tamanho] = fila_elevador[aTrocar_pos % fila_tamanho];
+          	fila_direcoes[i % fila_tamanho] = fila_direcoes[aTrocar_pos % fila_tamanho];
+            fila_elevador[aTrocar_pos % fila_tamanho] = aTrocar;
+          	fila_direcoes[aTrocar_pos % fila_tamanho] = aTrocarD;
+        }
+      	if(i - 1 == -1){i = 10;}
+        if(aTrocar_pos - 1 == -1){aTrocar_pos = 10;}
+    } 
+}
+
+void fila_ordenar_subindo2(){ // do primeiro para o ultimo
+    int aTrocar_pos = fila_pri % fila_tamanho;
+    int aTrocar;
+  	enum Direcoes aTrocarD;
+    for(int i = fila_pri + 1; fila_elevador[i % fila_tamanho] < fila_elevador[aTrocar_pos % fila_tamanho] && (fila_direcoes[aTrocar_pos % fila_tamanho] == ELEVADOR && fila_elevador[i % fila_tamanho] != -1); i++, aTrocar_pos++){ // primeiro verifica se realmente o novo numero esta entre o destino atual e os proximos
+        if(fila_elevador[aTrocar_pos % fila_tamanho] > andar_elevador){ // so vai ordenar aqueles que forem maior que o andar do elevador
+            aTrocar = fila_elevador[i % fila_tamanho];
+          	aTrocarD = fila_direcoes[i % fila_tamanho];
+            fila_elevador[i % fila_tamanho] = fila_elevador[aTrocar_pos % fila_tamanho];
+          	fila_direcoes[i % fila_tamanho] = fila_direcoes[aTrocar_pos % fila_tamanho];
+            fila_elevador[aTrocar_pos % fila_tamanho] = aTrocar;
+          	fila_direcoes[aTrocar_pos % fila_tamanho] = aTrocarD;
+        }
+    } 
+}
+
+void fila_ordenar_descendo2(){ // do primeiro para o ultimo
+    int aTrocar_pos = fila_pri % fila_tamanho;
+    int aTrocar;
+  	enum Direcoes aTrocarD;
+    for(int i = fila_pri + 1; fila_elevador[i % fila_tamanho] > fila_elevador[aTrocar_pos % fila_tamanho] && (fila_direcoes[aTrocar_pos % fila_tamanho] == ELEVADOR && fila_elevador[i % fila_tamanho] != -1); i++, aTrocar_pos++){ // primeiro verifica se realmente o novo numero esta entre o destino atual e os proximos
+        if(fila_elevador[aTrocar_pos % fila_tamanho] < andar_elevador){ // so vai ordenar aqueles que forem maior que o andar do elevador
+            aTrocar = fila_elevador[i % fila_tamanho];
+          	aTrocarD = fila_direcoes[i % fila_tamanho];
+            fila_elevador[i % fila_tamanho] = fila_elevador[aTrocar_pos % fila_tamanho];
+          	fila_direcoes[i % fila_tamanho] = fila_direcoes[aTrocar_pos % fila_tamanho];
+            fila_elevador[aTrocar_pos % fila_tamanho] = aTrocar;
+          	fila_direcoes[aTrocar_pos % fila_tamanho] = aTrocarD;
+        }
     } 
 }
 
 void fila_remove(){ // remove o primeiro elemento da lista
 	fila_elevador[fila_pri % fila_tamanho] = -1; // eu vo considera -1 como o nulo da fila, mesmo so sendo util pra organiza dos maiores pro menor
+  	fila_direcoes[fila_pri % fila_tamanho] = PARADO;
   	fila_pri++;
 }
 
@@ -294,9 +335,10 @@ int prox_Destino(){ // retorna o proximo andar da fila
 
 void fila_resetar(){
     for(int i = 0; i < sizeof(fila_elevador)/sizeof(int); i++){
-		fila_elevador[i] = NULL; 
+		fila_elevador[i] = -1; 
+      	fila_direcoes[i] = PARADO;
     }
-	fila_pri, fila_qntd = 0; // vai ser uma fila circular entao ele guarda qual posicao pra ler e a quantidade de chamadas
+	fila_pri, fila_qntd = 0;
 }
 
 
